@@ -6,7 +6,7 @@ using namespace std;
 const bool DEBUG = true;
 
 // initialize matrix and vectors (A is mxn, x is xn-vec)
-void init_rand(double* a, int m, int n, double* x, int xn);
+void init_rand(double* a, int m, int n, double* x, int xn, int rank);
 // local matvec: y = y+A*x, where A is m x n
 void local_gemv(double* A, double* x, double* y, int m, int n);
 
@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
     int nProcs, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    srand(rank*12345);
+    srand48(rank*12345);
 
     // Read dimensions and processor grid from command line arguments
     if(argc != 5) {
@@ -60,7 +60,8 @@ int main(int argc, char** argv) {
     double* Alocal = new double[mloc*nloc];
     double* xlocal = new double[xdim];
     double* ylocal = new double[ydim];
-    init_rand(Alocal, mloc, nloc, xlocal, xdim);
+    double* xtemp = new double[nloc];
+    init_rand(Alocal, mloc, nloc, xlocal, xdim, rank);
     memset(ylocal,0,ydim*sizeof(double));
 
     // start timer
@@ -68,7 +69,12 @@ int main(int argc, char** argv) {
 
     // Communicate input vector entries
 
+    MPI_Allgather(xlocal, xdim, MPI_DOUBLE, xtemp, xdim, MPI_DOUBLE, col_comm);   
+
     // Perform local matvec
+    
+    local_gemv(Alocal, xtemp, ylocal, mloc, nloc);
+
 
     // Communicate output vector entries
     
@@ -82,7 +88,18 @@ int main(int argc, char** argv) {
         for(int j = 0; j < xdim; j++) {
             cout << xlocal[j] << " ";
         }
-        cout << "\nand ended with y values\n";
+        cout << "\nand received x values\n";
+        for (int j = 0; j < nloc; j++) {
+          cout << xtemp[j] << " ";
+        }
+        cout << "\nand multipled with A\n";
+        for (int i = 0; i < mloc; i++) {
+          for (int j = 0; j < nloc; j++) {
+            cout << Alocal[i+j*mloc] << " ";
+          }
+          cout << "\n";
+        }
+        cout << "and ended with y values\n";
         for(int i = 0; i < ydim; i++) {
             cout << ylocal[i] << " ";
         }
@@ -112,15 +129,15 @@ void local_gemv(double* a, double* x, double* y, int m, int n) {
     }
 }
 
-void init_rand(double* a, int m, int n, double* x, int xn) {
+void init_rand(double* a, int m, int n, double* x, int xn, int rank) {
     // init matrix
     for(int i = 0; i < m; i++) {
         for(int j = 0; j < n; j++) {
-            a[i+j*m] = drand48();
+            a[i+j*m] = rank + i + j;
         }
     }
     // init input vector x
     for(int j = 0; j < xn; j++) {
-        x[j] = drand48();
+        x[j] = rank + j;
     }
 }
